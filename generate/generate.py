@@ -55,6 +55,7 @@ if __name__ == '__main__':
 
 
         context = "C"
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
         data = pd.read_csv(args.data_name + '.csv')
@@ -125,8 +126,8 @@ if __name__ == '__main__':
         model = GPT(mconf)
 
 
-        model.load_state_dict(torch.load(args.model_weight))
-        model.to('cuda')
+        model.load_state_dict(torch.load(args.model_weight, map_location=device))
+        model.to(device)
         print('Model loaded')
 
         gen_iter = math.ceil(args.gen_size / args.batch_size)
@@ -184,7 +185,7 @@ if __name__ == '__main__':
             molecules = []
             count += 1
             for i in tqdm(range(gen_iter)):
-                    x = torch.tensor([stoi[s] for s in regex.findall(context)], dtype=torch.long)[None,...].repeat(args.batch_size, 1).to('cuda')
+                    x = torch.tensor([stoi[s] for s in regex.findall(context)], dtype=torch.long)[None,...].repeat(args.batch_size, 1).to(device)
                     p = None
                     # p = torch.tensor([[c]]).repeat(args.batch_size, 1).to('cuda')   # for single condition
                     # p = torch.tensor([c]).repeat(args.batch_size, 1).unsqueeze(1).to('cuda')    # for multiple conditions
@@ -248,12 +249,12 @@ if __name__ == '__main__':
                 molecules = []
                 count += 1
                 for i in tqdm(range(gen_iter)):
-                        x = torch.tensor([stoi[s] for s in regex.findall(context)], dtype=torch.long)[None,...].repeat(args.batch_size, 1).to('cuda')
+                        x = torch.tensor([stoi[s] for s in regex.findall(context)], dtype=torch.long)[None,...].repeat(args.batch_size, 1).to(device)
                         p = None
                         if len(args.props) == 1:
-                                p = torch.tensor([[c]]).repeat(args.batch_size, 1).to('cuda')   # for single condition
+                                p = torch.tensor([[c]]).repeat(args.batch_size, 1).to(device)   # for single condition
                         else:
-                                p = torch.tensor([c]).repeat(args.batch_size, 1).unsqueeze(1).to('cuda')    # for multiple conditions
+                                p = torch.tensor([c]).repeat(args.batch_size, 1).unsqueeze(1).to(device)    # for multiple conditions
                         sca = None
                         y = sample(model, x, args.block_size, temperature=1, sample=True, top_k=None, prop = p, scaffold = sca)   # 0.7 for guacamol
                         for gen_mol in y:
@@ -321,9 +322,9 @@ if __name__ == '__main__':
                 molecules = []
                 count += 1
                 for i in tqdm(range(gen_iter)):
-                    x = torch.tensor([stoi[s] for s in regex.findall(context)], dtype=torch.long)[None,...].repeat(args.batch_size, 1).to('cuda')
+                    x = torch.tensor([stoi[s] for s in regex.findall(context)], dtype=torch.long)[None,...].repeat(args.batch_size, 1).to(device)
                     p = None
-                    sca = torch.tensor([stoi[s] for s in regex.findall(j)], dtype=torch.long)[None,...].repeat(args.batch_size, 1).to('cuda')
+                    sca = torch.tensor([stoi[s] for s in regex.findall(j)], dtype=torch.long)[None,...].repeat(args.batch_size, 1).to(device)
                     y = sample(model, x, args.block_size, temperature=1, sample=True, top_k=None, prop = p, scaffold = sca)   # 0.7 for guacamol
                     for gen_mol in y:
                             completion = ''.join([itos[int(i)] for i in gen_mol])
@@ -387,13 +388,13 @@ if __name__ == '__main__':
                     molecules = []
                     count += 1
                     for i in tqdm(range(gen_iter)):
-                        x = torch.tensor([stoi[s] for s in regex.findall(context)], dtype=torch.long)[None,...].repeat(args.batch_size, 1).to('cuda')
+                        x = torch.tensor([stoi[s] for s in regex.findall(context)], dtype=torch.long)[None,...].repeat(args.batch_size, 1).to(device)
                         p = None
                         if len(args.props) == 1:
-                                p = torch.tensor([[c]]).repeat(args.batch_size, 1).to('cuda')   # for single condition
+                                p = torch.tensor([[c]]).repeat(args.batch_size, 1).to(device)   # for single condition
                         else:
-                                p = torch.tensor([c]).repeat(args.batch_size, 1).unsqueeze(1).to('cuda')    # for multiple conditions
-                        sca = torch.tensor([stoi[s] for s in regex.findall(j)], dtype=torch.long)[None,...].repeat(args.batch_size, 1).to('cuda')
+                                p = torch.tensor([c]).repeat(args.batch_size, 1).unsqueeze(1).to(device)    # for multiple conditions
+                        sca = torch.tensor([stoi[s] for s in regex.findall(j)], dtype=torch.long)[None,...].repeat(args.batch_size, 1).to(device)
                         y = sample(model, x, args.block_size, temperature=1, sample=True, top_k=None, prop = p, scaffold = sca)   # 0.7 for guacamol
                         for gen_mol in y:
                                 completion = ''.join([itos[int(i)] for i in gen_mol])

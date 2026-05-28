@@ -1,9 +1,11 @@
+import argparse
 from guacamol.utils.chemistry import canonicalize_list, is_valid, calculate_pc_descriptors, continuous_kldiv, \
     discrete_kldiv, calculate_internal_pairwise_similarities
 from utils import canonic_smiles
 from fcd_torch import FCD as FCDMetric
 import pandas as pd
 import numpy as np
+import torch
 from moses.metrics.metrics import compute_intermediate_statistics
 
 if __name__ == '__main__':
@@ -17,6 +19,7 @@ if __name__ == '__main__':
     data.columns = data.columns.str.lower()
     data = data.sample(n = 10000, random_state = 42).reset_index(drop = True)
     gen = gen.sample(n = 10000, random_state = 42).reset_index(drop = True)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     pc_descriptor_subset = [
         'BertzCT',
@@ -38,10 +41,10 @@ if __name__ == '__main__':
 
 
     ptest = compute_intermediate_statistics(training_set_molecules, n_jobs=10,
-                                            device='cuda',
+                                            device=device,
                                             batch_size=512)
 
-    fcd = FCDMetric(n_jobs = 10, device = 'cuda', batch_size = 512)(gen=list(gen['smiles'].values), pref=ptest['FCD'])
+    fcd = FCDMetric(n_jobs = 10, device = device, batch_size = 512)(gen=list(gen['smiles'].values), pref=ptest['FCD'])
 
 
     print('FCD score: ', fcd)

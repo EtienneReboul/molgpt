@@ -20,6 +20,17 @@ https://www.kaggle.com/virajbagal/ligflow-final-weights
 
 To train the model, make sure you have the datasets' csv file in the same directory as the code files.
 
+## Environment
+
+Create the conda environment with:
+
+```bash
+conda env create -f environment.yml
+conda activate molgpt
+```
+
+The scripts now choose CPU or GPU automatically. The project will run on CPU, but the original training and generation workloads are still much faster on a CUDA-capable machine.
+
 # Training
 
 ```

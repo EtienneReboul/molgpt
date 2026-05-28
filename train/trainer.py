@@ -5,6 +5,7 @@ so nothing in this file really has anything to do with GPT specifically.
 
 import math
 import logging
+from contextlib import nullcontext
 
 from tqdm import tqdm
 import numpy as np
@@ -53,14 +54,11 @@ class Trainer:
         self.config = config
 
         # take over whatever gpus are on the system
-        self.device = 'cpu'
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.stoi = stoi
         self.itos = itos
 
-        if torch.cuda.is_available():
-            self.device = torch.cuda.current_device()
-            # self.model = torch.nn.DataParallel(self.model).to(self.device)
-            self.model = self.model.to(self.device)
+        self.model = self.model.to(self.device)
 
     def save_checkpoint(self):
         # DataParallel wrappers keep raw model object in .module attribute
@@ -72,7 +70,7 @@ class Trainer:
         model, config = self.model, self.config
         raw_model = model.module if hasattr(self.model, "module") else model
         optimizer = raw_model.configure_optimizers(config)
-        scaler = GradScaler()
+        scaler = GradScaler(enabled=self.device.type == 'cuda')
 
         # [' ', '#', '(', ')', '-', '1', '2', '3', '4', '5', '6', '<', '=', 'B', 'C', 'F', 'H', 'N', 'O', 'S', '[', ']', 'c', 'l', 'n', 'o', 'r', 's']
         # ['#', '(', ')', '-', '1', '2', '3', '4', '5', '6', '<', '=', 'Br', 'C', 'Cl', 'F', 'N', 'O', 'S', '[H]', '[nH]', 'c', 'n', 'o', 's']
@@ -97,7 +95,8 @@ class Trainer:
                 scaffold = scaffold.to(self.device) 
 
                 # forward the model
-                with torch.cuda.amp.autocast():
+                amp_context = torch.cuda.amp.autocast() if self.device.type == 'cuda' else nullcontext()
+                with amp_context:
                     with torch.set_grad_enabled(is_train):
                         logits, loss, _ = model(x, y, p, scaffold)
                         loss = loss.mean() # collapse all losses if they are scattered on multiple gpus
@@ -165,7 +164,7 @@ class Trainer:
                 regex = re.compile(pattern)
                 context = "C"
                 for i in range(2):
-                    x = torch.tensor([self.stoi[s] for s in regex.findall(context)], dtype=torch.long)[None,...].repeat(512, 1).to('cuda')
+                    x = torch.tensor([self.stoi[s] for s in regex.findall(context)], dtype=torch.long)[None,...].repeat(512, 1).to(self.device)
                     p = None
                     sca = None
                     y = sample(model, x, self.config.block_size, temperature=0.8, sample=True, top_k=10, prop = p, scaffold = sca)

@@ -1,0 +1,19 @@
+name: molgpt
+channels:
+  - pytorch
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - numpy
+  - pandas
+  - tqdm
+  - matplotlib
+  - seaborn
+  - rdkit
+  - pytorch
+  - pip:
+      - wandb
+      - guacamol
+      - moses
+      - fcd-torch

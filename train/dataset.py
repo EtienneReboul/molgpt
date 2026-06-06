@@ -2,11 +2,12 @@ import torch
 from torch.utils.data import Dataset
 from utils import SmilesEnumerator
 import numpy as np
-import re
+import math
+from smiles_tokenization import tokenize_and_pad
 
 class SmileDataset(Dataset):
 
-    def __init__(self, args, data, content, block_size, aug_prob = 0.5, prop = None, scaffold = None, scaffold_maxlen = None):
+    def __init__(self, args, data, content, block_size, aug_prob = 0.0, prop = None, scaffold = None, scaffold_maxlen = None):
         chars = sorted(list(set(content)))
         data_size, vocab_size = len(data), len(chars)
         print('data has %d smiles, %d unique characters.' % (data_size, vocab_size))
@@ -22,6 +23,7 @@ class SmileDataset(Dataset):
         self.debug = args.debug
         self.tfm = SmilesEnumerator()
         self.aug_prob = aug_prob
+        self.tokenization_mode = getattr(args, 'tokenization_mode', 'classic')
     
     def __len__(self):
         if self.debug:
@@ -38,21 +40,8 @@ class SmileDataset(Dataset):
         if p < self.aug_prob:
             smiles = self.tfm.randomize_smiles(smiles)
 
-        pattern =  "(\[[^\]]+]|<|Br?|Cl?|N|O|S|P|F|I|b|c|n|o|s|p|\(|\)|\.|=|#|-|\+|\\\\|\/|:|~|@|\?|>|\*|\$|\%[0-9]{2}|[0-9])"
-        regex = re.compile(pattern)
-        smiles += str('<')*(self.max_len - len(regex.findall(smiles)))
-
-        if len(regex.findall(smiles)) > self.max_len:
-            smiles = smiles[:self.max_len]
-
-        smiles=regex.findall(smiles)
-
-        scaffold += str('<')*(self.scaf_max_len - len(regex.findall(scaffold)))
-        
-        if len(regex.findall(scaffold)) > self.scaf_max_len:
-            scaffold = scaffold[:self.scaf_max_len]
-
-        scaffold=regex.findall(scaffold)
+        smiles = tokenize_and_pad(smiles, self.max_len, self.tokenization_mode)
+        scaffold = tokenize_and_pad(scaffold, self.scaf_max_len, self.tokenization_mode)
 
         dix =  [self.stoi[s] for s in smiles]
         sca_dix = [self.stoi[s] for s in scaffold]

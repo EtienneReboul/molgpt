@@ -16,6 +16,7 @@ from dataset import SmileDataset
 import math
 from utils import SmilesEnumerator
 import re
+from smiles_tokenization import build_vocab, max_token_length
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
@@ -46,6 +47,12 @@ if __name__ == '__main__':
                         help="total epochs", required=False)
     parser.add_argument('--batch_size', type=int, default=512,
                         help="batch size", required=False)
+    parser.add_argument('--aug_prob', type=float, default=0.0,
+                        help="probability of randomizing each training SMILES", required=False)
+    parser.add_argument('--tokenization_mode', type=str, default='classic', choices=['classic', 'block'],
+                        help="classic SMILES tokens or dot-separated block tokens", required=False)
+    parser.add_argument('--block_vocab_path', type=str, default=None,
+                        help="path to a block token list (.txt or .json) used when tokenization_mode=block", required=False)
     parser.add_argument('--learning_rate', type=int,
                         default=6e-4, help="learning rate", required=False)
     parser.add_argument('--lstm_layers', type=int, default=0,
@@ -93,36 +100,42 @@ if __name__ == '__main__':
     scaffold = train_data['scaffold_smiles']
     vscaffold = val_data['scaffold_smiles']
 
-    pattern = "(\[[^\]]+]|<|Br?|Cl?|N|O|S|P|F|I|b|c|n|o|s|p|\(|\)|\.|=|#|-|\+|\\\\|\/|:|~|@|\?|>|\*|\$|\%[0-9]{2}|[0-9])"
-    regex = re.compile(pattern)
+    all_sequences = list(smiles.values) + list(vsmiles.values) + list(scaffold.values) + list(vscaffold.values)
+    if args.tokenization_mode == 'block':
+        whole_string = build_vocab(all_sequences, tokenization_mode='block', vocab_path=args.block_vocab_path)
+        max_len = max_token_length(list(smiles.values) + list(vsmiles.values), tokenization_mode='block')
+        scaffold_max_len = max_token_length(list(scaffold.values) + list(vscaffold.values), tokenization_mode='block')
+    else:
+        pattern = "(\[[^\]]+]|<|Br?|Cl?|N|O|S|P|F|I|b|c|n|o|s|p|\(|\)|\.|=|#|-|\+|\\\\|\/|:|~|@|\?|>|\*|\$|\%[0-9]{2}|[0-9])"
+        regex = re.compile(pattern)
 
-    lens = [len(regex.findall(i.strip()))
-              for i in (list(smiles.values) + list(vsmiles.values))]
-    max_len = max(lens)
-    print('Max len: ', max_len)
+        lens = [len(regex.findall(i.strip()))
+                for i in (list(smiles.values) + list(vsmiles.values))]
+        max_len = max(lens)
+        print('Max len: ', max_len)
 
-    lens = [len(regex.findall(i.strip()))
-            for i in (list(scaffold.values) + list(vscaffold.values))]
-    scaffold_max_len = max(lens)
-    print('Scaffold max len: ', scaffold_max_len)
+        lens = [len(regex.findall(i.strip()))
+                for i in (list(scaffold.values) + list(vscaffold.values))]
+        scaffold_max_len = max(lens)
+        print('Scaffold max len: ', scaffold_max_len)
 
-    smiles = [i + str('<')*(max_len - len(regex.findall(i.strip())))
-                for i in smiles]
-    vsmiles = [i + str('<')*(max_len - len(regex.findall(i.strip())))
-                for i in vsmiles]
+        smiles = [i + str('<')*(max_len - len(regex.findall(i.strip())))
+                    for i in smiles]
+        vsmiles = [i + str('<')*(max_len - len(regex.findall(i.strip())))
+                    for i in vsmiles]
 
-    scaffold = [i + str('<')*(scaffold_max_len -
-                                len(regex.findall(i.strip()))) for i in scaffold]
-    vscaffold = [i + str('<')*(scaffold_max_len -
-                                len(regex.findall(i.strip()))) for i in vscaffold]
+        scaffold = [i + str('<')*(scaffold_max_len -
+                                    len(regex.findall(i.strip()))) for i in scaffold]
+        vscaffold = [i + str('<')*(scaffold_max_len -
+                                    len(regex.findall(i.strip()))) for i in vscaffold]
 
-    # whole_string = ' '.join(smiles + vsmiles + scaffold + vscaffold)
-    # whole_string = sorted(list(set(regex.findall(whole_string))))
-    # print(whole_string)
+        whole_string = ['#', '%10', '%11', '%12', '(', ')', '-', '1', '2', '3', '4', '5', '6', '7', '8', '9', '<', '=', 'B', 'Br', 'C', 'Cl', 'F', 'I', 'N', 'O', 'P', 'S', '[B-]', '[BH-]', '[BH2-]', '[BH3-]', '[B]', '[C+]', '[C-]', '[CH+]', '[CH-]', '[CH2+]', '[CH2]', '[CH]', '[F+]', '[H]', '[I+]', '[IH2]', '[IH]', '[N+]', '[N-]', '[NH+]', '[NH-]', '[NH2+]', '[NH3+]', '[N]', '[O+]', '[O-]', '[OH+]', '[O]', '[P+]', '[PH+]', '[PH2+]', '[PH]', '[S+]', '[S-]', '[SH+]', '[SH]', '[Se+]', '[SeH+]', '[SeH]', '[Se]', '[Si-]', '[SiH-]', '[SiH2]', '[SiH]', '[Si]', '[b-]', '[bH-]', '[c+]', '[c-]', '[cH+]', '[cH-]', '[n+]', '[n-]', '[nH+]', '[nH]', '[o+]', '[s+]', '[sH+]', '[se+]', '[se]', 'b', 'c', 'n', 'o', 'p', 's']
 
-    whole_string = ['#', '%10', '%11', '%12', '(', ')', '-', '1', '2', '3', '4', '5', '6', '7', '8', '9', '<', '=', 'B', 'Br', 'C', 'Cl', 'F', 'I', 'N', 'O', 'P', 'S', '[B-]', '[BH-]', '[BH2-]', '[BH3-]', '[B]', '[C+]', '[C-]', '[CH+]', '[CH-]', '[CH2+]', '[CH2]', '[CH]', '[F+]', '[H]', '[I+]', '[IH2]', '[IH]', '[N+]', '[N-]', '[NH+]', '[NH-]', '[NH2+]', '[NH3+]', '[N]', '[O+]', '[O-]', '[OH+]', '[O]', '[P+]', '[PH+]', '[PH2+]', '[PH]', '[S+]', '[S-]', '[SH+]', '[SH]', '[Se+]', '[SeH+]', '[SeH]', '[Se]', '[Si-]', '[SiH-]', '[SiH2]', '[SiH]', '[Si]', '[b-]', '[bH-]', '[c+]', '[c-]', '[cH+]', '[cH-]', '[n+]', '[n-]', '[nH+]', '[nH]', '[o+]', '[s+]', '[sH+]', '[se+]', '[se]', 'b', 'c', 'n', 'o', 'p', 's']
+    if args.tokenization_mode == 'block':
+        print('Max len: ', max_len)
+        print('Scaffold max len: ', scaffold_max_len)
 
-    train_dataset = SmileDataset(args, smiles, whole_string, max_len, prop=prop, aug_prob=0, scaffold=scaffold, scaffold_maxlen= scaffold_max_len)
+    train_dataset = SmileDataset(args, smiles, whole_string, max_len, prop=prop, aug_prob=args.aug_prob, scaffold=scaffold, scaffold_maxlen= scaffold_max_len)
     valid_dataset = SmileDataset(args, vsmiles, whole_string, max_len, prop=vprop, aug_prob=0, scaffold=vscaffold, scaffold_maxlen= scaffold_max_len)
 
     mconf = GPTConfig(train_dataset.vocab_size, train_dataset.max_len, num_props=num_props,  # args.num_props,

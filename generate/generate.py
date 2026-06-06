@@ -27,6 +27,17 @@ sys.path.append(os.path.join(RDConfig.RDContribDir, 'SA_Score'))
 import sascorer
 
 from rdkit.Chem.rdMolDescriptors import CalcTPSA
+from smiles_tokenization import build_vocab, max_token_length, tokenize_smiles, tokenize_and_pad
+
+
+def encode_context(sequence, stoi, tokenization_mode):
+        tokens = tokenize_smiles(sequence, tokenization_mode)
+        return torch.tensor([stoi[token] for token in tokens], dtype=torch.long)
+
+
+def encode_padded(sequence, stoi, max_len, tokenization_mode):
+        tokens = tokenize_and_pad(sequence, max_len, tokenization_mode)
+        return torch.tensor([stoi[token] for token in tokens], dtype=torch.long)
 
 
 # python generate.py --model_weight guacamol_nocond_new.pt --data_name guacamol2 --csv_name guacamol_temp1_nocond_30k --gen_size 1000 --vocab_size 94 --block_size 100
@@ -50,11 +61,12 @@ if __name__ == '__main__':
         parser.add_argument('--n_head', type=int, default = 8, help="number of heads", required=False)
         parser.add_argument('--n_embd', type=int, default = 256, help="embedding dimension", required=False)
         parser.add_argument('--lstm_layers', type=int, default = 2, help="number of layers in lstm", required=False)
+        parser.add_argument('--tokenization_mode', type=str, default='classic', choices=['classic', 'block'], help='tokenization mode for inputs and scaffold strings', required=False)
+        parser.add_argument('--block_vocab_path', type=str, default=None, help='path to a block token list (.txt or .json) used when tokenization_mode=block', required=False)
+        parser.add_argument('--start_context', type=str, default='C', help='initial context token or dot-separated block string for generation', required=False)
 
         args = parser.parse_args()
 
-
-        context = "C"
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -99,6 +111,13 @@ if __name__ == '__main__':
         else:
             scaffold_max_len = 0
 
+                if args.tokenization_mode == 'block':
+                        vocab_sequences = list(smiles.values) + list(scaf.values)
+                        vocab_tokens = build_vocab(vocab_sequences, tokenization_mode='block', vocab_path=args.block_vocab_path)
+                        max_len = max_token_length(list(smiles.values), tokenization_mode='block')
+                        if args.scaffold:
+                                scaffold_max_len = max_token_length(list(scaf.values), tokenization_mode='block')
+
         #content = ' '.join(smiles + scaf)
         #chars = sorted(list(set(regex.findall(content))))
 
@@ -107,7 +126,10 @@ if __name__ == '__main__':
         #with open(f'{args.data_name}_stoi.json', 'w') as f:
         #         json.dump(stoi, f)
 
-        stoi = json.load(open(f'{args.data_name}_stoi.json', 'r'))
+                if args.tokenization_mode == 'block':
+                        stoi = { token: idx for idx, token in enumerate(vocab_tokens) }
+                else:
+                        stoi = json.load(open(f'{args.data_name}_stoi.json', 'r'))
 
         #itos = { i:ch for i,ch in enumerate(chars) }
         itos = { i:ch for ch,i in stoi.items() }
@@ -118,6 +140,16 @@ if __name__ == '__main__':
         # condition = ['c1ccc(-n2cnc3ccccc32)cc1', 'O=C(c1cc[nH]c1)N1CCN(c2ccccc2)CC1']   # 'O=C(CNC(=O)NCCN1CCOCC1)Nc1ccccc1'
         #condition = [ i + str('<')*(scaffold_max_len - len(regex.findall(i))) for i in condition]
         #print(condition)
+
+                context = args.start_context
+                if context not in stoi and args.tokenization_mode == 'block':
+                        fallback_tokens = [token for token in itos.values() if token not in {'.', '<'}]
+                        if not fallback_tokens:
+                                raise ValueError('No valid start token available in block vocabulary')
+                        context = fallback_tokens[0]
+
+                if context not in stoi:
+                        raise ValueError(f'Start context token {context!r} is not in the vocabulary')
 
         num_props = len(args.props)
         mconf = GPTConfig(args.vocab_size, args.block_size, num_props = num_props,
@@ -153,9 +185,10 @@ if __name__ == '__main__':
         
         scaf_condition = None
 
-        if args.scaffold:
-            scaf_condition = ['O=C(Cc1ccccc1)NCc1ccccc1', 'c1cnc2[nH]ccc2c1', 'c1ccc(-c2ccnnc2)cc1', 'c1ccc(-n2cnc3ccccc32)cc1', 'O=C(c1cc[nH]c1)N1CCN(c2ccccc2)CC1']
-            scaf_condition = [ i + str('<')*(scaffold_max_len - len(regex.findall(i))) for i in scaf_condition]
+                if args.scaffold:
+                        scaf_condition = ['O=C(Cc1ccccc1)NCc1ccccc1', 'c1cnc2[nH]ccc2c1', 'c1ccc(-c2ccnnc2)cc1', 'c1ccc(-n2cnc3ccccc32)cc1', 'O=C(c1cc[nH]c1)N1CCN(c2ccccc2)CC1']
+                        if args.tokenization_mode == 'classic':
+                                scaf_condition = [i + str('<')*(scaffold_max_len - len(regex.findall(i))) for i in scaf_condition]
 
         all_dfs = []
         all_metrics = []
@@ -185,7 +218,7 @@ if __name__ == '__main__':
             molecules = []
             count += 1
             for i in tqdm(range(gen_iter)):
-                    x = torch.tensor([stoi[s] for s in regex.findall(context)], dtype=torch.long)[None,...].repeat(args.batch_size, 1).to(device)
+                    x = encode_context(context, stoi, args.tokenization_mode)[None,...].repeat(args.batch_size, 1).to(device)
                     p = None
                     # p = torch.tensor([[c]]).repeat(args.batch_size, 1).to('cuda')   # for single condition
                     # p = torch.tensor([c]).repeat(args.batch_size, 1).unsqueeze(1).to('cuda')    # for multiple conditions
@@ -249,7 +282,7 @@ if __name__ == '__main__':
                 molecules = []
                 count += 1
                 for i in tqdm(range(gen_iter)):
-                        x = torch.tensor([stoi[s] for s in regex.findall(context)], dtype=torch.long)[None,...].repeat(args.batch_size, 1).to(device)
+                        x = encode_context(context, stoi, args.tokenization_mode)[None,...].repeat(args.batch_size, 1).to(device)
                         p = None
                         if len(args.props) == 1:
                                 p = torch.tensor([[c]]).repeat(args.batch_size, 1).to(device)   # for single condition
@@ -322,9 +355,9 @@ if __name__ == '__main__':
                 molecules = []
                 count += 1
                 for i in tqdm(range(gen_iter)):
-                    x = torch.tensor([stoi[s] for s in regex.findall(context)], dtype=torch.long)[None,...].repeat(args.batch_size, 1).to(device)
+                    x = encode_context(context, stoi, args.tokenization_mode)[None,...].repeat(args.batch_size, 1).to(device)
                     p = None
-                    sca = torch.tensor([stoi[s] for s in regex.findall(j)], dtype=torch.long)[None,...].repeat(args.batch_size, 1).to(device)
+                    sca = encode_padded(j, stoi, scaffold_max_len, args.tokenization_mode)[None,...].repeat(args.batch_size, 1).to(device)
                     y = sample(model, x, args.block_size, temperature=1, sample=True, top_k=None, prop = p, scaffold = sca)   # 0.7 for guacamol
                     for gen_mol in y:
                             completion = ''.join([itos[int(i)] for i in gen_mol])
@@ -388,13 +421,13 @@ if __name__ == '__main__':
                     molecules = []
                     count += 1
                     for i in tqdm(range(gen_iter)):
-                        x = torch.tensor([stoi[s] for s in regex.findall(context)], dtype=torch.long)[None,...].repeat(args.batch_size, 1).to(device)
+                        x = encode_context(context, stoi, args.tokenization_mode)[None,...].repeat(args.batch_size, 1).to(device)
                         p = None
                         if len(args.props) == 1:
                                 p = torch.tensor([[c]]).repeat(args.batch_size, 1).to(device)   # for single condition
                         else:
                                 p = torch.tensor([c]).repeat(args.batch_size, 1).unsqueeze(1).to(device)    # for multiple conditions
-                        sca = torch.tensor([stoi[s] for s in regex.findall(j)], dtype=torch.long)[None,...].repeat(args.batch_size, 1).to(device)
+                        sca = encode_padded(j, stoi, scaffold_max_len, args.tokenization_mode)[None,...].repeat(args.batch_size, 1).to(device)
                         y = sample(model, x, args.block_size, temperature=1, sample=True, top_k=None, prop = p, scaffold = sca)   # 0.7 for guacamol
                         for gen_mol in y:
                                 completion = ''.join([itos[int(i)] for i in gen_mol])

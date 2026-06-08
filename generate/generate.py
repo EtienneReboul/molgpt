@@ -1,4 +1,4 @@
-from utils import check_novelty, sample, canonic_smiles
+from utils import check_novelty, sample, canonic_smiles, get_mol
 from dataset import SmileDataset
 from rdkit.Chem import QED
 from rdkit.Chem import Crippen
@@ -13,9 +13,7 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from moses.utils import get_mol
 import re
-import moses
 import json
 from rdkit.Chem import RDConfig
 import json
@@ -67,7 +65,12 @@ if __name__ == '__main__':
 
         args = parser.parse_args()
 
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if torch.cuda.is_available():
+            device = torch.device('cuda')
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            device = torch.device('mps')
+        else:
+            device = torch.device('cpu')
 
 
         data = pd.read_csv(args.data_name + '.csv')

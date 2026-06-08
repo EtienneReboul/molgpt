@@ -2,8 +2,6 @@ import pandas as pd
 import argparse
 from utils import set_seed
 import numpy as np
-import wandb
-
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -22,7 +20,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--run_name', type=str,
-                        help="name for wandb run", required=False)
+                        help="name for checkpoint and output files", required=False)
     parser.add_argument('--debug', action='store_true',
                         default=False, help='debug')
     # in moses dataset, on average, there are only 5 molecules per scaffold
@@ -62,49 +60,41 @@ if __name__ == '__main__':
 
     set_seed(42)
 
-    wandb.init(project="lig_gpt", name=args.run_name)
-
     data = pd.read_csv('datasets/' + args.data_name + '.csv')
     data = data.dropna(axis=0).reset_index(drop=True)
     # data = data.sample(frac = 0.1).reset_index(drop=True)
     data.columns = data.columns.str.lower()
 
-    if 'moses' in args.data_name:
-        train_data = data[data['split'] == 'train'].reset_index(
-            drop=True)   # 'split' instead of 'source' in moses
-    else:
-        train_data = data[data['source'] == 'train'].reset_index(
-            drop=True)   # 'split' instead of 'source' in moses
+    split_col = 'split' if 'split' in data.columns else 'source'
+    available_splits = data[split_col].unique()
+    val_split = 'test' if 'val' not in available_splits else 'val'
 
-    # train_data = train_data.sample(frac = 0.1, random_state = 42).reset_index(drop=True)
-
-    if 'moses' in args.data_name:
-        val_data = data[data['split'] == 'test'].reset_index(
-            drop=True)   # test for Moses. val for guacamol
-    else:
-        val_data = data[data['source'] == 'val'].reset_index(
-            drop=True)   # test for Moses. val for guacamol
-
-    # val_data = val_data.sample(frac = 0.1, random_state = 42).reset_index(drop=True)
+    train_data = data[data[split_col] == 'train'].reset_index(drop=True)
+    val_data = data[data[split_col] == val_split].reset_index(drop=True)
 
     smiles = train_data['smiles']
     vsmiles = val_data['smiles']
 
-    # prop = train_data[['qed']]
-    # vprop = val_data[['qed']]
-
-    prop = train_data[args.props].values.tolist()
-    vprop = val_data[args.props].values.tolist()
+    if args.num_props > 0:
+        prop = train_data[args.props].values.tolist()
+        vprop = val_data[args.props].values.tolist()
+    else:
+        prop = [[0.0]] * len(train_data)
+        vprop = [[0.0]] * len(val_data)
     num_props = args.num_props
 
-    scaffold = train_data['scaffold_smiles']
-    vscaffold = val_data['scaffold_smiles']
+    if 'scaffold_smiles' in data.columns:
+        scaffold = train_data['scaffold_smiles']
+        vscaffold = val_data['scaffold_smiles']
+    else:
+        scaffold = pd.Series([''] * len(train_data))
+        vscaffold = pd.Series([''] * len(val_data))
 
     all_sequences = list(smiles.values) + list(vsmiles.values) + list(scaffold.values) + list(vscaffold.values)
     if args.tokenization_mode == 'block':
         whole_string = build_vocab(all_sequences, tokenization_mode='block', vocab_path=args.block_vocab_path)
         max_len = max_token_length(list(smiles.values) + list(vsmiles.values), tokenization_mode='block')
-        scaffold_max_len = max_token_length(list(scaffold.values) + list(vscaffold.values), tokenization_mode='block')
+        scaffold_max_len = max(max_token_length(list(scaffold.values) + list(vscaffold.values), tokenization_mode='block'), 1)
     else:
         pattern = "(\[[^\]]+]|<|Br?|Cl?|N|O|S|P|F|I|b|c|n|o|s|p|\(|\)|\.|=|#|-|\+|\\\\|\/|:|~|@|\?|>|\*|\$|\%[0-9]{2}|[0-9])"
         regex = re.compile(pattern)
@@ -116,7 +106,7 @@ if __name__ == '__main__':
 
         lens = [len(regex.findall(i.strip()))
                 for i in (list(scaffold.values) + list(vscaffold.values))]
-        scaffold_max_len = max(lens)
+        scaffold_max_len = max(lens) if lens else 1
         print('Scaffold max len: ', scaffold_max_len)
 
         smiles = [i + str('<')*(max_len - len(regex.findall(i.strip())))
@@ -145,9 +135,10 @@ if __name__ == '__main__':
 
     tconf = TrainerConfig(max_epochs=args.max_epochs, batch_size=args.batch_size, learning_rate=args.learning_rate,
                             lr_decay=True, warmup_tokens=0.1*len(train_data)*max_len, final_tokens=args.max_epochs*len(train_data)*max_len,
-                            num_workers=10, ckpt_path=f'../cond_gpt/weights/{args.run_name}.pt', block_size=train_dataset.max_len, generate=False)
+                            num_workers=10, ckpt_path=f'checkpoints/{args.run_name}.pt', block_size=train_dataset.max_len, generate=False)
     trainer = Trainer(model, train_dataset, valid_dataset,
                         tconf, train_dataset.stoi, train_dataset.itos)
-    df = trainer.train(wandb)
+    df = trainer.train()
 
-    df.to_csv(f'{args.run_name}.csv', index=False)
+    if df is not None:
+        df.to_csv(f'{args.run_name}.csv', index=False)

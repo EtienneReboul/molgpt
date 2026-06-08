@@ -16,8 +16,7 @@ from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data.dataloader import DataLoader
 from torch.cuda.amp import GradScaler
 
-from utils import check_novelty, sample, canonic_smiles
-from moses.utils import get_mol
+from utils import check_novelty, sample, canonic_smiles, get_mol
 import re
 import pandas as pd
 from rdkit import Chem
@@ -53,20 +52,26 @@ class Trainer:
         self.test_dataset = test_dataset
         self.config = config
 
-        # take over whatever gpus are on the system
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        # take over whatever device is available on the system (CUDA -> MPS -> CPU)
+        if torch.cuda.is_available():
+            self.device = torch.device('cuda')
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            self.device = torch.device('mps')
+        else:
+            self.device = torch.device('cpu')
         self.stoi = stoi
         self.itos = itos
 
         self.model = self.model.to(self.device)
 
     def save_checkpoint(self):
-        # DataParallel wrappers keep raw model object in .module attribute
         raw_model = self.model.module if hasattr(self.model, "module") else self.model
+        import os
+        os.makedirs(os.path.dirname(self.config.ckpt_path), exist_ok=True)
         logger.info("saving %s", self.config.ckpt_path)
         torch.save(raw_model.state_dict(), self.config.ckpt_path)
 
-    def train(self, wandb):
+    def train(self):
         model, config = self.model, self.config
         raw_model = model.module if hasattr(self.model, "module") else model
         optimizer = raw_model.configure_optimizers(config)
@@ -129,7 +134,6 @@ class Trainer:
                         lr = config.learning_rate
 
                     # report progress
-                    wandb.log({'step_train_loss': loss, 'train_step': it + epoch*len(loader), 'learning_rate': lr})
                     pbar.set_description(f"epoch {epoch+1} iter {it}: train loss {loss.item():.5f}. lr {lr:e}")
     
             if is_train:
@@ -149,8 +153,6 @@ class Trainer:
             train_loss = run_epoch('train')
             if self.test_dataset is not None:
                 test_loss = run_epoch('test')
-
-            wandb.log({'epoch_valid_loss': test_loss, 'epoch_train_loss': train_loss, 'epoch': epoch + 1})
 
             # supports early stopping based on the test loss, or just save always if no test set is provided
             good_model = self.test_dataset is None or test_loss < best_loss

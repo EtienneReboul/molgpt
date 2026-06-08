@@ -5,7 +5,7 @@ channels:
 dependencies:
   - python=3.10
   - pip
-  - numpy
+  - numpy<2
   - pandas
   - tqdm
   - matplotlib
@@ -13,7 +13,5 @@ dependencies:
   - rdkit
   - pytorch
   - pip:
-      - wandb
       - guacamol
-      - moses
       - fcd-torch

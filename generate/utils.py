@@ -3,8 +3,21 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-from moses.utils import get_mol
 from rdkit import Chem
+
+def get_mol(smiles_or_mol):
+    if isinstance(smiles_or_mol, str):
+        if len(smiles_or_mol) == 0:
+            return None
+        mol = Chem.MolFromSmiles(smiles_or_mol)
+        if mol is None:
+            return None
+        try:
+            Chem.SanitizeMol(mol)
+        except ValueError:
+            return None
+        return mol
+    return smiles_or_mol
    
 import numpy as np
 import threading

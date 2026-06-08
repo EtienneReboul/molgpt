@@ -12,7 +12,7 @@
 # For H200 instead: --gres=gpu:h200:1
 
 module load conda
-conda activate molgpt
+source activate molgpt
 
 cd "$SLURM_SUBMIT_DIR"
 mkdir -p logs checkpoints

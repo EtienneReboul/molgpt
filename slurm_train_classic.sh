@@ -7,11 +7,12 @@
 #SBATCH --cpus-per-task=14
 #SBATCH --mem=64G
 #SBATCH --time=24:00:00
+#SBATCH --partition=gpu
 #SBATCH --gres=gpu:l40s:1
 # For H200 instead: --gres=gpu:h200:1
 
 module load conda
-conda activate molgpt
+source activate molgpt
 
 cd "$SLURM_SUBMIT_DIR"
 mkdir -p logs checkpoints

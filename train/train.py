@@ -55,6 +55,10 @@ if __name__ == '__main__':
                         default=6e-4, help="learning rate", required=False)
     parser.add_argument('--lstm_layers', type=int, default=0,
                         help="number of layers in lstm", required=False)
+    parser.add_argument('--resume', action='store_true', default=False,
+                        help='resume training from existing checkpoint at ckpt_path')
+    parser.add_argument('--grad_accumulation_steps', type=int, default=1,
+                        help='accumulate gradients over N batches; effective batch = batch_size * N')
 
     args = parser.parse_args()
 
@@ -135,7 +139,8 @@ if __name__ == '__main__':
 
     tconf = TrainerConfig(max_epochs=args.max_epochs, batch_size=args.batch_size, learning_rate=args.learning_rate,
                             lr_decay=True, warmup_tokens=0.1*len(train_data)*max_len, final_tokens=args.max_epochs*len(train_data)*max_len,
-                            num_workers=10, ckpt_path=f'checkpoints/{args.run_name}.pt', block_size=train_dataset.max_len, generate=False)
+                            num_workers=10, ckpt_path=f'checkpoints/{args.run_name}.pt', block_size=train_dataset.max_len, generate=False,
+                            resume=args.resume, grad_accumulation_steps=args.grad_accumulation_steps)
     trainer = Trainer(model, train_dataset, valid_dataset,
                         tconf, train_dataset.stoi, train_dataset.itos)
     df = trainer.train()

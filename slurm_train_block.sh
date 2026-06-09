@@ -6,7 +6,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=14
 #SBATCH --mem=64G
-#SBATCH --time=24:00:00
+#SBATCH --time=72:00:00
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:l40s:1
 # For H200 instead: --gres=gpu:h200:1
@@ -23,4 +23,5 @@ python train/train.py \
     --data_name molgpt_block \
     --tokenization_mode block \
     --block_vocab_path datasets/block_vocab.txt \
-    --aug_prob 0.0
+    --aug_prob 0.0 \
+    --resume

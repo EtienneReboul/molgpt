@@ -5,6 +5,7 @@ so nothing in this file really has anything to do with GPT specifically.
 
 import math
 import logging
+import os
 from contextlib import nullcontext
 
 from tqdm import tqdm
@@ -39,6 +40,10 @@ class TrainerConfig:
     # checkpoint settings
     ckpt_path = None
     num_workers = 0 # for DataLoader
+    # accumulate gradients over N micro-batches; effective_batch = batch_size * grad_accumulation_steps
+    grad_accumulation_steps = 1
+    # resume training from an existing checkpoint at ckpt_path
+    resume = False
 
     def __init__(self, **kwargs):
         for k,v in kwargs.items():
@@ -64,12 +69,30 @@ class Trainer:
 
         self.model = self.model.to(self.device)
 
-    def save_checkpoint(self):
+    def save_checkpoint(self, epoch, optimizer, best_loss):
         raw_model = self.model.module if hasattr(self.model, "module") else self.model
-        import os
-        os.makedirs(os.path.dirname(self.config.ckpt_path), exist_ok=True)
+        ckpt_dir = os.path.dirname(self.config.ckpt_path)
+        if ckpt_dir:
+            os.makedirs(ckpt_dir, exist_ok=True)
         logger.info("saving %s", self.config.ckpt_path)
-        torch.save(raw_model.state_dict(), self.config.ckpt_path)
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': raw_model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'best_loss': best_loss,
+            'tokens': self.tokens,
+        }, self.config.ckpt_path)
+
+    def load_checkpoint(self, optimizer):
+        checkpoint = torch.load(self.config.ckpt_path, map_location=self.device)
+        raw_model = self.model.module if hasattr(self.model, "module") else self.model
+        raw_model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        start_epoch = checkpoint['epoch'] + 1
+        best_loss = checkpoint.get('best_loss', float('inf'))
+        self.tokens = checkpoint.get('tokens', 0)
+        logger.info("resuming from epoch %d", start_epoch)
+        return start_epoch, best_loss
 
     def train(self):
         model, config = self.model, self.config
@@ -77,9 +100,12 @@ class Trainer:
         optimizer = raw_model.configure_optimizers(config)
         scaler = GradScaler(enabled=self.device.type == 'cuda')
 
-        # [' ', '#', '(', ')', '-', '1', '2', '3', '4', '5', '6', '<', '=', 'B', 'C', 'F', 'H', 'N', 'O', 'S', '[', ']', 'c', 'l', 'n', 'o', 'r', 's']
-        # ['#', '(', ')', '-', '1', '2', '3', '4', '5', '6', '<', '=', 'Br', 'C', 'Cl', 'F', 'N', 'O', 'S', '[H]', '[nH]', 'c', 'n', 'o', 's']
+        self.tokens = 0
+        start_epoch = 0
+        best_loss = float('inf')
 
+        if config.resume and config.ckpt_path and os.path.exists(config.ckpt_path):
+            start_epoch, best_loss = self.load_checkpoint(optimizer)
 
         def run_epoch(split):
             is_train = split == 'train'
@@ -91,51 +117,56 @@ class Trainer:
 
             losses = []
             pbar = tqdm(enumerate(loader), total=len(loader)) if is_train else enumerate(loader)
+            lr = config.learning_rate
+
+            if is_train:
+                model.zero_grad()
+
             for it, (x, y, p, scaffold) in pbar:
 
                 # place data on the correct device
                 x = x.to(self.device)
                 y = y.to(self.device)
                 p = p.to(self.device)
-                scaffold = scaffold.to(self.device) 
+                scaffold = scaffold.to(self.device)
 
                 # forward the model
                 amp_context = torch.cuda.amp.autocast() if self.device.type == 'cuda' else nullcontext()
                 with amp_context:
                     with torch.set_grad_enabled(is_train):
                         logits, loss, _ = model(x, y, p, scaffold)
-                        loss = loss.mean() # collapse all losses if they are scattered on multiple gpus
+                        loss = loss.mean()
                         losses.append(loss.item())
 
                 if is_train:
+                    # scale loss before backward so gradients are averaged over accumulation steps
+                    scaled_loss = loss / config.grad_accumulation_steps
+                    scaler.scale(scaled_loss).backward()
 
-                    # backprop and update the parameters
-                    model.zero_grad()
-                    scaler.scale(loss).backward()
-                    scaler.unscale_(optimizer)
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_norm_clip)
-                    scaler.step(optimizer)
-                    scaler.update()
+                    is_last_batch = (it + 1) == len(loader)
+                    if ((it + 1) % config.grad_accumulation_steps == 0) or is_last_batch:
+                        scaler.unscale_(optimizer)
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_norm_clip)
+                        scaler.step(optimizer)
+                        scaler.update()
+                        model.zero_grad()
 
-                    # decay the learning rate based on our progress
-                    if config.lr_decay:
-                        self.tokens += (y >= 0).sum() # number of tokens processed this step (i.e. label is not -100)
-                        if self.tokens < config.warmup_tokens:
-                            # linear warmup
-                            lr_mult = float(self.tokens) / float(max(1, config.warmup_tokens))
-                        else:
-                            # cosine learning rate decay
-                            progress = float(self.tokens - config.warmup_tokens) / float(max(1, config.final_tokens - config.warmup_tokens))
-                            lr_mult = max(0.1, 0.5 * (1.0 + math.cos(math.pi * progress)))
-                        lr = config.learning_rate * lr_mult
-                        for param_group in optimizer.param_groups:
-                            param_group['lr'] = lr
-                    else:
-                        lr = config.learning_rate
+                        # decay the learning rate based on our progress
+                        if config.lr_decay:
+                            self.tokens += (y >= 0).sum() # number of tokens processed this step
+                            if self.tokens < config.warmup_tokens:
+                                # linear warmup
+                                lr_mult = float(self.tokens) / float(max(1, config.warmup_tokens))
+                            else:
+                                # cosine learning rate decay
+                                progress = float(self.tokens - config.warmup_tokens) / float(max(1, config.final_tokens - config.warmup_tokens))
+                                lr_mult = max(0.1, 0.5 * (1.0 + math.cos(math.pi * progress)))
+                            lr = config.learning_rate * lr_mult
+                            for param_group in optimizer.param_groups:
+                                param_group['lr'] = lr
 
-                    # report progress
-                    pbar.set_description(f"epoch {epoch+1} iter {it}: train loss {loss.item():.5f}. lr {lr:e}")
-    
+                        pbar.set_description(f"epoch {epoch+1} iter {it}: train loss {loss.item():.5f}. lr {lr:e}")
+
             if is_train:
                 return float(np.mean(losses))
 
@@ -144,11 +175,9 @@ class Trainer:
                 logger.info("test loss: %f", test_loss)
                 return test_loss
 
-        best_loss = float('inf')
-        self.tokens = 0 # counter used for learning rate decay
         molecules = []
 
-        for epoch in range(config.max_epochs):
+        for epoch in range(start_epoch, config.max_epochs):
 
             train_loss = run_epoch('train')
             if self.test_dataset is not None:
@@ -159,7 +188,7 @@ class Trainer:
             if self.config.ckpt_path is not None and good_model:
                 best_loss = test_loss
                 print(f'Saving at epoch {epoch + 1}')
-                self.save_checkpoint()
+                self.save_checkpoint(epoch, optimizer, best_loss)
 
             if self.config.generate:
                 pattern =  "(\[[^\]]+]|<|Br?|Cl?|N|O|S|P|F|I|b|c|n|o|s|p|\(|\)|\.|=|#|-|\+|\\\\|\/|:|~|@|\?|>|\*|\$|\%[0-9]{2}|[0-9])"

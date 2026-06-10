@@ -15,7 +15,6 @@ import torch
 import torch.optim as optim
 from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data.dataloader import DataLoader
-from torch.cuda.amp import GradScaler
 
 from utils import check_novelty, sample, canonic_smiles, get_mol
 import re
@@ -84,13 +83,26 @@ class Trainer:
         }, self.config.ckpt_path)
 
     def load_checkpoint(self, optimizer):
-        checkpoint = torch.load(self.config.ckpt_path, map_location=self.device)
+        checkpoint = torch.load(self.config.ckpt_path, map_location=self.device, weights_only=True)
         raw_model = self.model.module if hasattr(self.model, "module") else self.model
-        raw_model.load_state_dict(checkpoint['model_state_dict'])
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        start_epoch = checkpoint['epoch'] + 1
-        best_loss = checkpoint.get('best_loss', float('inf'))
-        self.tokens = checkpoint.get('tokens', 0)
+
+        if 'model_state_dict' in checkpoint:
+            # new format: full training state
+            raw_model.load_state_dict(checkpoint['model_state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            start_epoch = checkpoint['epoch'] + 1
+            best_loss = checkpoint.get('best_loss', float('inf'))
+            self.tokens = checkpoint.get('tokens', 0)
+        else:
+            # legacy format: checkpoint is the bare state dict (no epoch/optimizer state)
+            logger.warning(
+                "checkpoint is in legacy format (weights only) — optimizer state and epoch "
+                "count are unavailable; resuming weights from epoch 0 with fresh optimizer"
+            )
+            raw_model.load_state_dict(checkpoint)
+            start_epoch = 0
+            best_loss = float('inf')
+
         logger.info("resuming from epoch %d", start_epoch)
         return start_epoch, best_loss
 
@@ -98,7 +110,7 @@ class Trainer:
         model, config = self.model, self.config
         raw_model = model.module if hasattr(self.model, "module") else model
         optimizer = raw_model.configure_optimizers(config)
-        scaler = GradScaler(enabled=self.device.type == 'cuda')
+        scaler = torch.amp.GradScaler('cuda', enabled=self.device.type == 'cuda')
 
         self.tokens = 0
         start_epoch = 0
@@ -131,7 +143,7 @@ class Trainer:
                 scaffold = scaffold.to(self.device)
 
                 # forward the model
-                amp_context = torch.cuda.amp.autocast() if self.device.type == 'cuda' else nullcontext()
+                amp_context = torch.amp.autocast(device_type='cuda') if self.device.type == 'cuda' else nullcontext()
                 with amp_context:
                     with torch.set_grad_enabled(is_train):
                         logits, loss, _ = model(x, y, p, scaffold)

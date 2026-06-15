@@ -14,9 +14,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import re
-import json
 from rdkit.Chem import RDConfig
-import json
 
 import os
 import sys
@@ -136,7 +134,8 @@ if __name__ == '__main__':
         if args.tokenization_mode == 'block':
                 stoi = { token: idx for idx, token in enumerate(vocab_tokens) }
         else:
-                stoi = json.load(open(f'{args.data_name}_stoi.json', 'r'))
+                classic_vocab = sorted(list(set(['#', '%10', '%11', '%12', '(', ')', '-', '1', '2', '3', '4', '5', '6', '7', '8', '9', '<', '=', 'B', 'Br', 'C', 'Cl', 'F', 'I', 'N', 'O', 'P', 'S', '[B-]', '[BH-]', '[BH2-]', '[BH3-]', '[B]', '[C+]', '[C-]', '[CH+]', '[CH-]', '[CH2+]', '[CH2]', '[CH]', '[F+]', '[H]', '[I+]', '[IH2]', '[IH]', '[N+]', '[N-]', '[NH+]', '[NH-]', '[NH2+]', '[NH3+]', '[N]', '[O+]', '[O-]', '[OH+]', '[O]', '[P+]', '[PH+]', '[PH2+]', '[PH]', '[S+]', '[S-]', '[SH+]', '[SH]', '[Se+]', '[SeH+]', '[SeH]', '[Se]', '[Si-]', '[SiH-]', '[SiH2]', '[SiH]', '[Si]', '[b-]', '[bH-]', '[c+]', '[c-]', '[cH+]', '[cH-]', '[n+]', '[n-]', '[nH+]', '[nH]', '[o+]', '[s+]', '[sH+]', '[se+]', '[se]', 'b', 'c', 'n', 'o', 'p', 's'])))
+                stoi = { ch:i for i,ch in enumerate(classic_vocab) }
 
         #itos = { i:ch for i,ch in enumerate(chars) }
         itos = { i:ch for ch,i in stoi.items() }

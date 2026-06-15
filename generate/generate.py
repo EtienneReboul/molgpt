@@ -114,7 +114,8 @@ if __name__ == '__main__':
                 vocab_sequences = list(smiles.values) + list(scaf.values)
                 vocab_tokens = build_vocab(vocab_sequences, tokenization_mode='block', vocab_path=args.block_vocab_path)
                 max_len = max_token_length(list(smiles.values), tokenization_mode='block')
-                scaffold_max_len = max(max_token_length(list(scaf.values), tokenization_mode='block'), 1)
+                scaf_list = [s for s in scaf.values if s]
+                scaffold_max_len = max(max_token_length(scaf_list, tokenization_mode='block'), 1) if scaf_list else 1
         else:
                 if ('moses' in args.data_name) and args.scaffold:
                         scaffold_max_len = 48

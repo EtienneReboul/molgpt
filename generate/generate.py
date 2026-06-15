@@ -77,12 +77,15 @@ if __name__ == '__main__':
         data = data.dropna(axis=0).reset_index(drop=True)
         data.columns = data.columns.str.lower()
 
+        split_col = 'split' if 'split' in data.columns else 'source'
+        scaf_col = 'scaffold_smiles' if 'scaffold_smiles' in data.columns else 'scaffold'
+
         if 'moses' in args.data_name:
             smiles = data[data['split']!='test_scaffolds']['smiles']   # needed for moses
-            scaf = data[data['split']!='test_scaffolds']['scaffold_smiles']   # needed for moses
+            scaf = data[data['split']!='test_scaffolds'][scaf_col]
         else:
-            smiles = data[data['source']!='test']['smiles']
-            scaf = data[data['source']!='test']['scaffold_smiles']
+            smiles = data[data[split_col]!='test']['smiles']
+            scaf = data[data[split_col]!='test'][scaf_col]
 
         # scaffold = data[data['split']!='test_scaffolds']['scaffold_smiles']
         # lens = [len(i.strip()) for i in scaffold.values]
@@ -260,7 +263,7 @@ if __name__ == '__main__':
             if 'moses' in args.data_name:
                     novel_ratio = check_novelty(unique_smiles, set(data[data['split']=='train']['smiles']))   # replace 'source' with 'split' for moses
             else:
-                    novel_ratio = check_novelty(unique_smiles, set(data[data['source']=='train']['smiles']))   # replace 'source' with 'split' for moses
+                    novel_ratio = check_novelty(unique_smiles, set(data[data[split_col]=='train']['smiles']))
 
 
             print('Valid ratio: ', np.round(len(results)/(args.batch_size*gen_iter), 3))
@@ -325,7 +328,7 @@ if __name__ == '__main__':
                 if 'moses' in args.data_name:
                         novel_ratio = check_novelty(unique_smiles, set(data[data['split']=='train']['smiles']))   # replace 'source' with 'split' for moses
                 else:
-                        novel_ratio = check_novelty(unique_smiles, set(data[data['source']=='train']['smiles']))   # replace 'source' with 'split' for moses
+                        novel_ratio = check_novelty(unique_smiles, set(data[data[split_col]=='train']['smiles']))
 
 
                 print(f'Condition: {c}')
@@ -395,7 +398,7 @@ if __name__ == '__main__':
                 if 'moses' in args.data_name:
                         novel_ratio = check_novelty(unique_smiles, set(data[data['split']=='train']['smiles']))   # replace 'source' with 'split' for moses
                 else:
-                        novel_ratio = check_novelty(unique_smiles, set(data[data['source']=='train']['smiles']))   # replace 'source' with 'split' for moses
+                        novel_ratio = check_novelty(unique_smiles, set(data[data[split_col]=='train']['smiles']))
 
 
                 print(f'Scaffold: {j}')
@@ -465,7 +468,7 @@ if __name__ == '__main__':
                     if 'moses' in args.data_name:
                             novel_ratio = check_novelty(unique_smiles, set(data[data['split']=='train']['smiles']))   # replace 'source' with 'split' for moses
                     else:
-                            novel_ratio = check_novelty(unique_smiles, set(data[data['source']=='train']['smiles']))   # replace 'source' with 'split' for moses
+                            novel_ratio = check_novelty(unique_smiles, set(data[data[split_col]=='train']['smiles']))
 
 
                     print(f'Condition: {c}')
@@ -503,7 +506,7 @@ if __name__ == '__main__':
         if 'moses' in args.data_name:
                 novel_ratio = check_novelty(unique_smiles, set(data[data['split']=='train']['smiles']))    # replace 'source' with 'split' for moses
         else:
-                novel_ratio = check_novelty(unique_smiles, set(data[data['source']=='train']['smiles']))    # replace 'source' with 'split' for moses
+                novel_ratio = check_novelty(unique_smiles, set(data[data[split_col]=='train']['smiles']))
                
 
         print('Valid ratio: ', np.round(len(results)/(args.batch_size*gen_iter*count), 3))

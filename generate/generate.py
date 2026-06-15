@@ -117,12 +117,12 @@ if __name__ == '__main__':
         else:
             scaffold_max_len = 0
 
-                if args.tokenization_mode == 'block':
-                        vocab_sequences = list(smiles.values) + list(scaf.values)
-                        vocab_tokens = build_vocab(vocab_sequences, tokenization_mode='block', vocab_path=args.block_vocab_path)
-                        max_len = max_token_length(list(smiles.values), tokenization_mode='block')
-                        if args.scaffold:
-                                scaffold_max_len = max_token_length(list(scaf.values), tokenization_mode='block')
+        if args.tokenization_mode == 'block':
+                vocab_sequences = list(smiles.values) + list(scaf.values)
+                vocab_tokens = build_vocab(vocab_sequences, tokenization_mode='block', vocab_path=args.block_vocab_path)
+                max_len = max_token_length(list(smiles.values), tokenization_mode='block')
+                if args.scaffold:
+                        scaffold_max_len = max_token_length(list(scaf.values), tokenization_mode='block')
 
         #content = ' '.join(smiles + scaf)
         #chars = sorted(list(set(regex.findall(content))))
@@ -132,10 +132,10 @@ if __name__ == '__main__':
         #with open(f'{args.data_name}_stoi.json', 'w') as f:
         #         json.dump(stoi, f)
 
-                if args.tokenization_mode == 'block':
-                        stoi = { token: idx for idx, token in enumerate(vocab_tokens) }
-                else:
-                        stoi = json.load(open(f'{args.data_name}_stoi.json', 'r'))
+        if args.tokenization_mode == 'block':
+                stoi = { token: idx for idx, token in enumerate(vocab_tokens) }
+        else:
+                stoi = json.load(open(f'{args.data_name}_stoi.json', 'r'))
 
         #itos = { i:ch for i,ch in enumerate(chars) }
         itos = { i:ch for ch,i in stoi.items() }

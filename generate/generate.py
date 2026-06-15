@@ -78,14 +78,14 @@ if __name__ == '__main__':
         data.columns = data.columns.str.lower()
 
         split_col = 'split' if 'split' in data.columns else 'source'
-        scaf_col = 'scaffold_smiles' if 'scaffold_smiles' in data.columns else 'scaffold'
+        scaf_col = 'scaffold_smiles' if 'scaffold_smiles' in data.columns else ('scaffold' if 'scaffold' in data.columns else None)
 
         if 'moses' in args.data_name:
             smiles = data[data['split']!='test_scaffolds']['smiles']   # needed for moses
-            scaf = data[data['split']!='test_scaffolds'][scaf_col]
+            scaf = data[data['split']!='test_scaffolds'][scaf_col] if scaf_col else pd.Series([], dtype=str)
         else:
             smiles = data[data[split_col]!='test']['smiles']
-            scaf = data[data[split_col]!='test'][scaf_col]
+            scaf = data[data[split_col]!='test'][scaf_col] if scaf_col else pd.Series([], dtype=str)
 
         # scaffold = data[data['split']!='test_scaffolds']['scaffold_smiles']
         # lens = [len(i.strip()) for i in scaffold.values]

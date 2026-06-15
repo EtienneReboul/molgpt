@@ -147,15 +147,15 @@ if __name__ == '__main__':
         #condition = [ i + str('<')*(scaffold_max_len - len(regex.findall(i))) for i in condition]
         #print(condition)
 
-                context = args.start_context
-                if context not in stoi and args.tokenization_mode == 'block':
-                        fallback_tokens = [token for token in itos.values() if token not in {'.', '<'}]
-                        if not fallback_tokens:
-                                raise ValueError('No valid start token available in block vocabulary')
-                        context = fallback_tokens[0]
+        context = args.start_context
+        if context not in stoi and args.tokenization_mode == 'block':
+                fallback_tokens = [token for token in itos.values() if token not in {'.', '<'}]
+                if not fallback_tokens:
+                        raise ValueError('No valid start token available in block vocabulary')
+                context = fallback_tokens[0]
 
-                if context not in stoi:
-                        raise ValueError(f'Start context token {context!r} is not in the vocabulary')
+        if context not in stoi:
+                raise ValueError(f'Start context token {context!r} is not in the vocabulary')
 
         num_props = len(args.props)
         mconf = GPTConfig(args.vocab_size, args.block_size, num_props = num_props,
@@ -191,10 +191,10 @@ if __name__ == '__main__':
         
         scaf_condition = None
 
-                if args.scaffold:
-                        scaf_condition = ['O=C(Cc1ccccc1)NCc1ccccc1', 'c1cnc2[nH]ccc2c1', 'c1ccc(-c2ccnnc2)cc1', 'c1ccc(-n2cnc3ccccc32)cc1', 'O=C(c1cc[nH]c1)N1CCN(c2ccccc2)CC1']
-                        if args.tokenization_mode == 'classic':
-                                scaf_condition = [i + str('<')*(scaffold_max_len - len(regex.findall(i))) for i in scaf_condition]
+        if args.scaffold:
+                scaf_condition = ['O=C(Cc1ccccc1)NCc1ccccc1', 'c1cnc2[nH]ccc2c1', 'c1ccc(-c2ccnnc2)cc1', 'c1ccc(-n2cnc3ccccc32)cc1', 'O=C(c1cc[nH]c1)N1CCN(c2ccccc2)CC1']
+                if args.tokenization_mode == 'classic':
+                        scaf_condition = [i + str('<')*(scaffold_max_len - len(regex.findall(i))) for i in scaf_condition]
 
         all_dfs = []
         all_metrics = []

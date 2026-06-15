@@ -237,6 +237,8 @@ if __name__ == '__main__':
                     for gen_mol in y:
                             completion = ''.join([itos[int(i)] for i in gen_mol])
                             completion = completion.replace('<', '')
+                            if args.tokenization_mode == 'block':
+                                completion = completion.replace('.', '')
                             # gen_smiles.append(completion)
                             mol = get_mol(completion)
                             if mol:
@@ -302,6 +304,8 @@ if __name__ == '__main__':
                         for gen_mol in y:
                                 completion = ''.join([itos[int(i)] for i in gen_mol])
                                 completion = completion.replace('<', '')
+                                if args.tokenization_mode == 'block':
+                                        completion = completion.replace('.', '')
                                 # gen_smiles.append(completion)
                                 mol = get_mol(completion)
                                 if mol:
@@ -371,6 +375,8 @@ if __name__ == '__main__':
                     for gen_mol in y:
                             completion = ''.join([itos[int(i)] for i in gen_mol])
                             completion = completion.replace('<', '')
+                            if args.tokenization_mode == 'block':
+                                completion = completion.replace('.', '')
                             # gen_smiles.append(completion)
                             mol = get_mol(completion)
                             if mol:
@@ -441,10 +447,12 @@ if __name__ == '__main__':
                         for gen_mol in y:
                                 completion = ''.join([itos[int(i)] for i in gen_mol])
                                 completion = completion.replace('<', '')
+                                if args.tokenization_mode == 'block':
+                                        completion = completion.replace('.', '')
                                 # gen_smiles.append(completion)
                                 mol = get_mol(completion)
                                 if mol:
-                                        molecules.append(mol)                                
+                                        molecules.append(mol)
 
 
                     "Valid molecules % = {}".format(len(molecules))

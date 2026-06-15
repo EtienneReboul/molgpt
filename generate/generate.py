@@ -164,7 +164,9 @@ if __name__ == '__main__':
         model = GPT(mconf)
 
 
-        model.load_state_dict(torch.load(args.model_weight, map_location=device))
+        checkpoint = torch.load(args.model_weight, map_location=device)
+        state_dict = checkpoint['model_state_dict'] if 'model_state_dict' in checkpoint else checkpoint
+        model.load_state_dict(state_dict)
         model.to(device)
         print('Model loaded')
 

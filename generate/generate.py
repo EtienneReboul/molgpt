@@ -110,19 +110,19 @@ if __name__ == '__main__':
         #scaffold_max_len = max(lens)
         
         #scaf = [ i + str('<')*(scaffold_max_len - len(regex.findall(i))) for i in scaf]
-        if ('moses' in args.data_name) and args.scaffold:
-            scaffold_max_len=48
-        elif ('guacamol' in args.data_name) and args.scaffold:
-            scaffold_max_len = 98
-        else:
-            scaffold_max_len = 0
-
         if args.tokenization_mode == 'block':
                 vocab_sequences = list(smiles.values) + list(scaf.values)
                 vocab_tokens = build_vocab(vocab_sequences, tokenization_mode='block', vocab_path=args.block_vocab_path)
                 max_len = max_token_length(list(smiles.values), tokenization_mode='block')
-                if args.scaffold:
-                        scaffold_max_len = max_token_length(list(scaf.values), tokenization_mode='block')
+                scaffold_max_len = max(max_token_length(list(scaf.values), tokenization_mode='block'), 1)
+        else:
+                if ('moses' in args.data_name) and args.scaffold:
+                        scaffold_max_len = 48
+                elif ('guacamol' in args.data_name) and args.scaffold:
+                        scaffold_max_len = 98
+                else:
+                        lens = [len(regex.findall(i.strip())) for i in scaf.values] if len(scaf) > 0 else []
+                        scaffold_max_len = max(lens) if lens else 0
 
         #content = ' '.join(smiles + scaf)
         #chars = sorted(list(set(regex.findall(content))))

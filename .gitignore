@@ -2,3 +2,4 @@ datasets/
 *.pyc
 logs/
 checkpoints/    
+*.csv

@@ -27,4 +27,4 @@ python generate/generate.py \
     --gen_size 300000 \
     --batch_size 512 \
     --vocab_size 94 \
-    --block_size REPLACE_WITH_MAX_LEN_FROM_TRAINING_LOG
+    --block_size 83

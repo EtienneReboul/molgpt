@@ -3,3 +3,4 @@ datasets/
 logs/
 checkpoints/    
 *.csv
+.cache/

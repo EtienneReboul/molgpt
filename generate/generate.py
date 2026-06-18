@@ -160,14 +160,20 @@ if __name__ == '__main__':
         checkpoint = torch.load(args.model_weight, map_location=device, weights_only=False)
         state_dict = checkpoint['model_state_dict'] if 'model_state_dict' in checkpoint else checkpoint
 
-        # Auto-detect block_size from the saved attention mask to avoid shape mismatches.
-        if 'blocks.0.attn.mask' in state_dict:
-            block_size_ckpt = state_dict['blocks.0.attn.mask'].shape[-1]
-            if block_size_ckpt != args.block_size:
-                print(f'[warn] --block_size {args.block_size} overridden by checkpoint value {block_size_ckpt}')
-                args.block_size = block_size_ckpt
-
         num_props = len(args.props)
+
+        # Infer correct block_size and scaffold_maxlen from the checkpoint mask.
+        # train.py only reads 'scaffold_smiles' column; datasets with a 'scaffold' column
+        # get empty-string scaffolds → scaffold_max_len=0 at train time. generate.py
+        # may compute a different scaffold_max_len from the data, causing a mask mismatch.
+        if 'blocks.0.attn.mask' in state_dict:
+            ckpt_mask_size = state_dict['blocks.0.attn.mask'].shape[-1]
+            ckpt_num       = ckpt_mask_size - args.block_size          # = num_props_bit + scaffold_maxlen at train time
+            cur_num        = int(bool(num_props)) + scaffold_max_len
+            if ckpt_num != cur_num:
+                scaffold_max_len = ckpt_num - int(bool(num_props))
+                print(f'[warn] scaffold_max_len adjusted to {scaffold_max_len} to match checkpoint mask size {ckpt_mask_size}')
+
         mconf = GPTConfig(args.vocab_size, args.block_size, num_props = num_props,
                        n_layer=args.n_layer, n_head=args.n_head, n_embd=args.n_embd, scaffold = args.scaffold, scaffold_maxlen = scaffold_max_len,
                        lstm = args.lstm, lstm_layers = args.lstm_layers)
